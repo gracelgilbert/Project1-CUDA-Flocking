@@ -169,6 +169,19 @@ void Boids::initSimulation(int N) {
 	gridMinimum.z -= halfGridWidth;
 
 	// TODO-2.1 TODO-2.3 - Allocate additional buffers here.
+	cudaMalloc((void**)&dev_particleArrayIndices, N * sizeof(int));
+	checkCUDAErrorWithLine("cudaMalloc dev_particleArrayIndices failed!");
+
+	cudaMalloc((void**)&dev_particleGridIndices, N * sizeof(int));
+	checkCUDAErrorWithLine("cudaMalloc dev_particleGridIndices failed!");
+
+	cudaMalloc((void**)&dev_gridCellStartIndices, gridCellCount * sizeof(int));
+	checkCUDAErrorWithLine("cudaMalloc dev_gridCellStartIndices failed!");
+
+	cudaMalloc((void**)&dev_gridCellEndIndices, gridCellCount * sizeof(int));
+	checkCUDAErrorWithLine("cudaMalloc dev_gridCellEndIndices failed!");
+
+
 	cudaDeviceSynchronize();
 }
 
@@ -300,6 +313,7 @@ __global__ void kernUpdateVelocityBruteForce(int N, glm::vec3 *pos,
 
 
 	glm::vec3 outVel = computeVelocityChange(N, index, pos, vel1);
+	outVel += vel1[index];
 
 
 	// Clamp the speed
@@ -356,9 +370,20 @@ __global__ void kernComputeIndices(int N, int gridResolution,
 	glm::vec3 gridMin, float inverseCellWidth,
 	glm::vec3 *pos, int *indices, int *gridIndices) {
 	// TODO-2.1
+	// Get index of current thread
+	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+	if (index >= N) {
+		return;
+	}
 	// - Label each boid with the index of its grid cell.
+	glm::vec3 thisPos = pos[index];
+	glm::ivec3 cellValue = glm::floor((thisPos - gridMin) * inverseCellWidth);
+	gridIndices[index] = gridIndex3Dto1D(cellValue.x, cellValue.y, cellValue.z, gridCellCount);
+
 	// - Set up a parallel array of integer indices as pointers to the actual
 	//   boid data in pos and vel1/vel2
+	// NOTE: Is this right?
+	indices[index] = index;
 }
 
 // LOOK-2.1 Consider how this could be useful for indicating that a cell
@@ -376,6 +401,32 @@ __global__ void kernIdentifyCellStartEnd(int N, int *particleGridIndices,
 	// Identify the start point of each cell in the gridIndices array.
 	// This is basically a parallel unrolling of a loop that goes
 	// "this index doesn't match the one before it, must be a new cell!"
+
+	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+	if (index >= N) {
+		return;
+	}
+
+	int currGridIndex = particleGridIndices[index];
+
+	// If first index, set start index of currGridIndex to 0
+	if (index == 0) {
+		gridCellStartIndices[currGridIndex] = index; // index = 0
+	}
+
+	int prevGridIndex = particleGridIndices[index - 1];
+	if (prevGridIndex != currGridIndex) {
+		gridCellStartIndices[currGridIndex] = index;
+		gridCellEndIndices[prevGridIndex] = index; 
+		// Note: the cell does not include end index value, only includes end index - 1
+	}
+
+	// If last index, set the end index of the currGridIndex to N
+	if (index == N - 1) {
+		gridCellEndIndices[currGridIndex] = index + 1; // index + 1 = N
+	}
+
+
 }
 
 __global__ void kernUpdateVelNeighborSearchScattered(
