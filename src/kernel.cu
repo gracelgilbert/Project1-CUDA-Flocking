@@ -437,9 +437,49 @@ __global__ void kernUpdateVelNeighborSearchScattered(
 	glm::vec3 *pos, glm::vec3 *vel1, glm::vec3 *vel2) {
 	// TODO-2.1 - Update a boid's velocity using the uniform grid to reduce
 	// the number of boids that need to be checked.
+	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+	if (index >= N) {
+		return;
+	}
+
 	// - Identify the grid cell that this particle is in
+	glm::vec3 thisPos = pos[index];
+	glm::ivec3 cellIndex3D = glm::floor((thisPos - gridMin) * inverseCellWidth);
+	int cellIndex1D = gridIndex3Dto1D(cellIndex3D.x, cellIndex3D.y, cellIndex3D.z, gridCellCount);
+
 	// - Identify which cells may contain neighbors. This isn't always 8.
+	float maxRuleDist = glm::max(rule1Distance, glm::max(rule2Distance, rule3Distance));
+	// Bounding indices:
+	glm::ivec3 minPosCellIndex3D = glm::floor((thisPos - maxRuleDist - gridMin) * inverseCellWidth);
+	glm::ivec3 maxPosCellIndex3D = glm::ceil((thisPos + maxRuleDist - gridMin) * inverseCellWidth);
+
 	// - For each cell, read the start/end indices in the boid pointer array.
+	for (int x = minPosCellIndex3D.x; x <= maxPosCellIndex3D.x; ++x) {
+		for (int y = minPosCellIndex3D.y; y <= maxPosCellIndex3D.y; ++y) {
+			for (int z = minPosCellIndex3D.z; z <= maxPosCellIndex3D.z; ++z) {
+				// Get boides in curr cell:
+				int currCell = gridIndex3Dto1D(x % (N - 1), y % (N - 1), z % (N - 1), gridResolution);
+				int currCellStart = gridCellStartIndices[currCell];
+				int currCellEnd = gridCellEndIndices[currCell];
+
+				// TODO check if out of bounds
+
+				for (int b = currCellStart; b < currCellEnd; ++b) {
+					// This loop gets all the boid indices in the current cell
+					int currBoid = particleArrayIndices[b];
+					if (currBoid == index) {
+						continue;
+					}
+
+					glm::vec3 currPos = pos[currBoid];
+					// Rule 1:
+					// Rule 2:
+					// Rule 3:
+				}
+
+			}
+		}
+	}
 	// - Access each boid in the cell and compute velocity change from
 	//   the boids rules, if this boid is within the neighborhood distance.
 	// - Clamp the speed change before putting the new speed in vel2
