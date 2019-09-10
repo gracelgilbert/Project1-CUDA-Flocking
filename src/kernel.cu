@@ -70,8 +70,6 @@ glm::vec3 *dev_pos;
 glm::vec3 *dev_vel1;
 glm::vec3 *dev_vel2;
 
-//glm::vec3 *test_pos;
-
 // LOOK-2.1 - these are NOT allocated for you. You'll have to set up the thrust
 // pointers on your own too.
 
@@ -186,6 +184,9 @@ void Boids::initSimulation(int N) {
 	cudaMalloc((void**)&dev_gridCellEndIndices, gridCellCount * sizeof(int));
 	checkCUDAErrorWithLine("cudaMalloc dev_gridCellEndIndices failed!");
 
+	dev_thrust_particleArrayIndices = thrust::device_pointer_cast<int>(dev_particleArrayIndices);
+	dev_thrust_particleGridIndices = thrust::device_pointer_cast<int>(dev_particleGridIndices);
+
 	
 	// TODO-2.3 - Allocate additional buffers here.
 	cudaMalloc((void**)&dev_reshuffledPos, N * sizeof(glm::vec3));
@@ -261,53 +262,65 @@ __device__ float distanceSq(const glm::vec3 p1, const glm::vec3 p2) {
 */
 __device__ glm::vec3 computeVelocityChange(int N, int iSelf, const glm::vec3 *pos, const glm::vec3 *vel) {
 
-	// Rule 1: boids fly towards their local perceived center of mass, which excludes themselves
+	
 	const glm::vec3 thisPos = pos[iSelf];
 	const glm::vec3 thisVel = vel[iSelf];
 
-	glm::vec3 perceived_center = glm::vec3(0.0);
-	int neighbors = 0;
+	glm::vec3 cohVel = glm::vec3(0.f);
+	glm::vec3 sepVel = glm::vec3(0.f);
+	glm::vec3 alignVel = glm::vec3(0.f);
+
+	glm::vec3 perceived_center = glm::vec3(0.f);
+	glm::vec3 perceived_velocity = glm::vec3(0.f);
+
+	float rule1Neighbors = 0.f;
+	float rule3Neighbors = 0.f;
 
 	for (int i = 0; i < N; ++i) {
+		if (i == iSelf) {
+			continue;
+		}
 		glm::vec3 bPos = pos[i];
 		float dSq = distanceSq(bPos, thisPos);
-		if (i != iSelf && dSq < pow(rule1Distance, 2)) {
+
+		// Rule 1: boids fly towards their local perceived center of mass, which excludes themselves
+		if (dSq < rule1Distance * rule1Distance) {
 			perceived_center += bPos;
-			neighbors++;
+			rule1Neighbors++;
 		}
-	}
 
-	perceived_center /= neighbors;
-
-	glm::vec3 cohVel = (perceived_center - thisPos) * rule1Scale;
-
-
-	// Rule 2: boids try to stay a distance d away from each other
-
-	glm::vec3 c = glm::vec3(0.0);
-	for (int i = 0; i < N; ++i) {
-		glm::vec3 bPos = pos[i];
-		float dSq = distanceSq(bPos, thisPos);
-		if (i != iSelf && dSq < pow(rule2Distance, 2)) {
-			c -= (bPos - thisPos);
+		// Rule 2: boids try to stay a distance d away from each other
+		if (dSq < rule2Distance * rule2Distance) {
+			sepVel -= (bPos - thisPos);
 		}
-	}
 
-	glm::vec3 sepVel = c * rule2Scale;
-
-	// Rule 3: boids try to match the speed of surrounding boids
-	glm::vec3 perceived_velocity = glm::vec3(0.0);
-	neighbors = 0;
-	for (int i = 0; i < N; ++i) {
-		glm::vec3 bPos = pos[i];
-		float dSq = distanceSq(bPos, thisPos);
-		if (i != iSelf && dSq < pow(rule3Distance, 2)) {
+		// Rule 3: boids try to match the speed of surrounding boids
+		if (dSq < rule3Distance * rule3Distance) {
 			perceived_velocity += vel[i];
-			neighbors++;
+			rule3Neighbors++;
 		}
 	}
-	perceived_velocity /= neighbors;
-	glm::vec3 alignVel = perceived_velocity * rule3Scale;
+
+	if (rule1Neighbors > 0) {
+		perceived_center /= rule1Neighbors;
+		cohVel = (perceived_center - thisPos) * rule1Scale;
+	}
+	else {
+		cohVel = glm::vec3(0.f);
+	}
+
+
+
+	sepVel *= rule2Scale;
+
+	if (rule3Neighbors > 0) {
+		perceived_velocity /= rule3Neighbors;
+		alignVel = perceived_velocity * rule2Scale;
+	}
+	else {
+		alignVel = glm::vec3(0.f);
+	}
+	
 	return cohVel + sepVel + alignVel;
 }
 
@@ -657,6 +670,7 @@ __global__ void kernUpdateVelNeighborSearchCoherent(
 		}
 
 		vel2[index] = outVel;
+		// vel2[index] = glm::vec3(1.0);
 }
 
 /**
@@ -668,9 +682,9 @@ void Boids::stepSimulationNaive(float dt) {
 	dim3 blocksPerGrid((numObjects + blockSize - 1) / blockSize);
 	kernUpdateVelocityBruteForce << <blocksPerGrid, blockSize >> > (numObjects, dev_pos, dev_vel1, dev_vel2);
 	checkCUDAErrorWithLine("Brute force velocity errored!");
-	kernUpdatePos << <blocksPerGrid, blockSize >> > (numObjects, dt, dev_pos, dev_vel1);
+	kernUpdatePos << <blocksPerGrid, threadsPerBlock >> > (numObjects, dt, dev_pos, dev_vel1);
 	checkCUDAErrorWithLine("update pos errored!");
-	cudaMemcpy(dev_vel1, dev_vel2, numObjects * 3 * sizeof(float), cudaMemcpyDeviceToDevice);
+	cudaMemcpy(dev_vel1, dev_vel2, numObjects * sizeof(glm::vec3), cudaMemcpyDeviceToDevice);
 	// TODO-1.2 ping-pong the velocity buffers
 
 
@@ -695,8 +709,6 @@ void Boids::stepSimulationScatteredGrid(float dt) {
 	
 	// - Unstable key sort using Thrust. A stable sort isn't necessary, but you
 	//   are welcome to do a performance comparison.
-	dev_thrust_particleArrayIndices = thrust::device_pointer_cast<int>(dev_particleArrayIndices);
-	dev_thrust_particleGridIndices = thrust::device_pointer_cast<int>(dev_particleGridIndices);
 	thrust::sort_by_key(dev_thrust_particleGridIndices, 
 		dev_thrust_particleGridIndices + numObjects, 
 		dev_thrust_particleArrayIndices);
