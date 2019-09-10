@@ -68,6 +68,7 @@ end
 Each of the three rules produce a single change in velocity value for each boid.  To obtain the boid's final change in velocity value, we scale each of the three velocities and sum them together, adding them to the boid's previous frame velocity.  The scale values for each rule, as well as the neighborhood radii within each rule, alter the way the boids move with each other.
 
 ## Naive Approach
+The first implementation uses a naive, brute force approach.  This is the least efficient of the three implementations.  For each boid, we iterate over all other boids in the simulation and check if they are within the radius of each rule and finally apply the rules. This is very inefficient, as many of the boids will not be near the neighborhood of the current boid, and we are still iterating through all of them.  A more efficient approach would be to avoid having to iterate over boids that are absolutely not going to be close enough to affect the current boid. 
 
 ## Uniform Grid
 ### Scattered
