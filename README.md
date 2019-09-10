@@ -110,17 +110,20 @@ With some numbers of boids, the simulation behaves incorrectly.  The following i
 I am unsure exactly what is happening here, but it seems like at some values, my velocity calculation may break.  At other values, many of the boids disappear, which seems to indicate NaN or really high values for the velocities, but I was unable to determine where these bugs were coming from and how to fix them.
 
 ## Questions
-For each implementation, how does changing the number of boids affect performance? Why do you think this is?
+### For each implementation, how does changing the number of boids affect performance? Why do you think this is?
+
 For the naive implementation, increasing the number of boids exponentially slows down the framerate.  This is because every boid must iterate through every other boid, so the number of comparisons is O(n * n).  If we double n, we quadruple the computation.
 
 For the uniform grid implementation, the number of boids affects performance more linearly and more sporadically.  The runtime of this method is dependent on how many neighbors each boid has, so adding more boids may not drastically change how many neighbors to iterate through.  But at some point, the number of boids might generate more dense flocking, causing more nearby boids to search through.  Additionally, the framerate slows as the boids flock together, as they are closer together, causing each boid to have more neighbors.  For the coherent version, the framerate does not start at its peak, and instead increases at first with more boids.  This may be because the overhead of the reshuffling does not pay off until there are more boids.  
 
-For each implementation, how does changing the block count and block size affect performance?  Why do you think this is?
+### For each implementation, how does changing the block count and block size affect performance?  Why do you think this is?
+
 Changing the block count did not dramatically affect the performance.  For the naive implementation, the framerate slowed at a blocksize of 512, maybe because the blocks were larger than necessary so threads were not being used.  I noticed a similar pattern in the scattered grid implementation.  For the coherent grid, the behavior was more sporadic, possibly because the framerate changed and depended so much on the behavior of the boids.  
 
 If I were to redo the performance analysis, I would find a more consistent way to measure the performance/framerate that doesn't depend as much on the specific simulation and averages the framerate over the course of the simulation.  
 
-For the coherent uniform grid: did you experience any performance improvements with the more coherent uniform grid?  Was this the outcome you expected? Why or why not?
+### For the coherent uniform grid: did you experience any performance improvements with the more coherent uniform grid?  Was this the outcome you expected? Why or why not?
+
 I did experience performance improvements with the more coherent uniform grid. It was not significantly faster than the scattered grid, but it was consistently faster for every test.  This is what I expected overall, as the optimization cuts out the middle indexing step.  However, I did expect there to be some cases, maybe for the smaller number of boids, where the overhead of the shuffling was more costly than the middle indexing step, causing the scattered to be faster for some tests.  This may be something on my setup that allows that overhead to not add too much cost, or I may not have gone to low enough numbers of boids to see this effect. 
 
 Did changing cell width and checking 27 vs 8 neighboring cells affect performance?  Why or why not?
