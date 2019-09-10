@@ -5,6 +5,8 @@ Boids Flocking**
   * gracelgilbert.com
 * Tested on: Windows 10, i9-9900K @ 3.60GHz 64GB, GeForce RTX 2080 40860MB
 
+![](/images/CoverGif.gif)
+
 ## Overview
 This project implements a flocking simulation using the Reynolds Boids algorithm.  A flocking simulation is an artificial life model, where particles (boids) behave and interact with each other in a natural way.  The boids travel around the simulation space according to three rules:
 ### Rule 1 - Cohesion 
@@ -27,6 +29,10 @@ function rule1(Boid boid)
     return (perceived_center - boid.position) * rule1Scale
 end
 ```
+
+Below is the simulation with only cohesion activated.  Notice how the boids clump together in small neighborhoods.
+![](/images/cohesionOnly.gif)
+
 ### Rule 2 - Separation
 The separation rule allows boids to stay some distance away from other objects, in this case other boids.  For neighboring objects within a certain radius, a boid will adjust its velocity to move away from that object and avoid it.  This rule prevents the boids from continuously colliding into each other.
 
