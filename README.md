@@ -96,11 +96,11 @@ The diagrams below illustrate this flow of data for the coherent method:
 ![buffers for generating a uniform grid using index sort, then making the boid data coherent](images/Boids%20Ugrids%20buffers%20data%20coherent.png)
 
 ## Performance Analysis
-The following are plots of the frames per second in relation to both the number of boids in the simulation and the block size,  Note, the titles of the chart should say FPS, not FPM.
+The following are plots of the frames per second in relation to both the number of boids in the simulation and the block size.
 
-![](/images/FPMtoNumBoids.PNG)
+![](/images/FPStoNumBoids.PNG)
 
-![](/images/FPMtoBlockSize.PNG)
+![](/images/FPStoBlockSize.PNG)
 
 ## Bugs and Errors
 With some numbers of boids, the simulation behaves incorrectly.  The following is the simulation run with 160000 boids:
